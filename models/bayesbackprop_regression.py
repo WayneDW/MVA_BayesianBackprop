@@ -17,7 +17,7 @@ class Varposterior():
     def __init__(self , mu , rho):
         self.mu = mu
         self.rho = rho
-        self.sigma = torch.log(1 + self.rho)
+        self.sigma = torch.log(1 + torch.exp(self.rho))
         self.gaussian = torch.distributions.Normal(0,1)
     
     def sample(self):
