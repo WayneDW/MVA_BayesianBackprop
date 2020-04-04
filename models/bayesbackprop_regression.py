@@ -12,6 +12,7 @@ import torch.nn.functional as F
 import matplotlib.pyplot as plt
 import numpy as np
 
+
 class Varposterior():
     
     def __init__(self , mu , rho):
@@ -25,7 +26,7 @@ class Varposterior():
         return self.mu + self.sigma*epsilon
     
     def log_prob(self , x):
-        return torch.sum(-0.5*np.log(2*np.pi) - torch.log(self.sigma) - (x - self.mu)**2/self.sigma**2)
+        return torch.sum(-0.5*torch.log(2*np.pi*self.sigma**2) - (x - self.mu)**2/self.sigma**2)
         
 class Prior():
     
@@ -36,7 +37,7 @@ class Prior():
         self.gaussian1 = torch.distributions.Normal(0,sigma1)
         self.gaussian2 = torch.distributions.Normal(0,sigma2)
     
-    def sample(self):
+    def sample(self): 
         x = np.random.binomial(1 , self.pi)
         return x*self.gaussian1.sample(torch.Size([1])) + (1-x)*self.gaussian2.sample(torch.Size([1]))
     
@@ -73,17 +74,19 @@ class BayesianLinear(nn.Module):
 
         self.log_prior = self.w_prior.log_prob(w) + self.b_prior.log_prob(b)
         self.log_variational_posterior = self.w.log_prob(w) + self.b.log_prob(b)
-            
+        
         return x@torch.t(w) + b
             
 class BayesBackpropNet(nn.Module):
     
-    def __init__(self , hidden_size , dim_input , dim_output , prior_parameters):
+    def __init__(self , hidden_size , dim_input , dim_output , prior_parameters , sigma):
         super().__init__()
         self.fc1 = BayesianLinear(dim_input = dim_input , dim_output = hidden_size
                                                           , prior_parameters = prior_parameters)
         self.fc2 = BayesianLinear(dim_input = hidden_size , dim_output = dim_output
                                                           , prior_parameters = prior_parameters)
+        
+        self.sigma = sigma #noise associated with the data y = f(x ; w) + N(0 , self.sigma)
             
     def forward(self, x):
         return self.fc2(F.relu(self.fc1(x)))
@@ -98,10 +101,13 @@ class BayesBackpropNet(nn.Module):
         """
         return self.fc1.log_variational_posterior + self.fc2.log_variational_posterior
     
-    def log_likelihood(self):       
+    def log_likelihood(self , y , output):       
         """ Compute log(p(D|w))
+        
+            Rmk: y_i = f(x_i ; w) + epsilon (epsilon ~ N(0 , self.sigma)) 
+                 So we have p(y_i | x_i , w) = N(f(x_i ,; w) , self.sigma)
         """     
-        return 0
+        return torch.sum(-0.5*np.log(2*np.pi*self.sigma**2) - (y - output)**2/self.sigma**2)
     
     def sample_elbo(self, x , y , MC_samples , weight):        
         """ For a batch x compute weight*E(log(q(w|D)) - log(p(w))) - E(log(p(D |w)))
@@ -112,7 +118,7 @@ class BayesBackpropNet(nn.Module):
         for s in range(MC_samples):
             out = self.forward(x)
             elbo += (1/MC_samples)*(weight*(self.log_variational_posterior() - self.log_prior())
-                                          - self.log_likelihood()
+                                          - self.log_likelihood(y , out)
                                     )    
         return elbo
        
