@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Wed Apr  1 14:07:16 2020
-
-@author: nicol
-"""
-
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -18,15 +11,18 @@ class VarPosterior(object):
     def __init__(self, mu, rho):
         self.mu = mu
         self.rho = rho
-        self.sigma = torch.log(1 + torch.exp(self.rho))
         self.gaussian = torch.distributions.Normal(0, 1)
+
+    @property
+    def sigma(self):
+        return torch.log1p(torch.exp(self.rho))
 
     def sample(self):
         epsilon = self.gaussian.sample(self.rho.size())
         return self.mu + self.sigma * epsilon
 
     def log_prob(self, x):
-        return torch.sum(-0.5 * torch.log(2 * np.pi * self.sigma ** 2) - (x - self.mu) ** 2 / self.sigma ** 2)
+        return torch.sum(-0.5 * torch.log(2 * np.pi * self.sigma ** 2) - 0.5 * (x - self.mu) ** 2 / self.sigma ** 2)
 
 
 class Prior(object):
@@ -43,8 +39,8 @@ class Prior(object):
         return x * self.gaussian1.sample(torch.Size([1])) + (1 - x) * self.gaussian2.sample(torch.Size([1]))
 
     def log_prob(self, x):
-        return (torch.log(self.pi * self.gaussian1.log_prob(x).exp()
-                          + (1 - self.pi) * self.gaussian2.log_prob(x).exp())).sum()
+        return torch.sum(
+            torch.log(self.pi * self.gaussian1.log_prob(x).exp() + (1 - self.pi) * self.gaussian2.log_prob(x).exp()))
 
 
 class BayesianLinear(nn.Module):
@@ -76,13 +72,13 @@ class BayesianLinear(nn.Module):
         self.log_prior = self.w_prior.log_prob(w) + self.b_prior.log_prob(b)
         self.log_variational_posterior = self.w.log_prob(w) + self.b.log_prob(b)
 
-        return x @ torch.t(w) + b
+        return F.linear(x, w, b)
 
 
 class BayesBackpropNet(nn.Module):
 
     def __init__(self, hidden_size, dim_input, dim_output, prior_parameters, sigma):
-        super().__init__()
+        super(BayesBackpropNet, self).__init__()
         self.fc1 = BayesianLinear(dim_input=dim_input, dim_output=hidden_size
                                   , prior_parameters=prior_parameters)
         self.fc2 = BayesianLinear(dim_input=hidden_size, dim_output=dim_output
@@ -99,29 +95,27 @@ class BayesBackpropNet(nn.Module):
 
     def log_variational_posterior(self):
         """ Compute log(q(w|D)) """
-
         return self.fc1.log_variational_posterior + self.fc2.log_variational_posterior
 
     def log_likelihood(self, y, output):
         """ Compute log(p(D|w))
         
             Rmk: y_i = f(x_i ; w) + epsilon (epsilon ~ N(0 , self.sigma)) 
-                 So we have p(y_i | x_i , w) = N(f(x_i ,; w) , self.sigma)
+                 So we have p(y_i | x_i , w) = N(f(x_i ; w) , self.sigma)
         """
-        return torch.sum(-0.5 * np.log(2 * np.pi * self.sigma ** 2) - (y - output) ** 2 / self.sigma ** 2)
+        return torch.sum(-0.5 * np.log(2 * np.pi * self.sigma ** 2) - 0.5 * (y - output) ** 2 / self.sigma ** 2)
 
     def sample_elbo(self, x, y, MC_samples, weight):
-        """ For a batch x compute weight*E(log(q(w|D)) - log(p(w))) - E(log(p(D |w)))
+        """ For a batch x compute weight * E(log(q(w|D)) - log(p(w))) - E(log(p(D |w)))
             The expected values are computed with a MC scheme (at each step w is sampled
             from q(w | D))
         """
         elbo = 0
         for s in range(MC_samples):
             out = self.forward(x)
-            elbo += (1 / MC_samples) * (weight * (self.log_variational_posterior() - self.log_prior())
-                                        - self.log_likelihood(y, out)
-                                        )
-        return elbo
+            elbo += (self.log_variational_posterior() - self.log_prior() - self.log_likelihood(y, out))  # * weight
+            # TODO: handle weight properly
+        return elbo / MC_samples
 
 
 class BayesBackpropReg(object):
@@ -148,6 +142,8 @@ class BayesBackpropReg(object):
                     loss = self.net.sample_elbo(local_batch, local_labels, MC_samples, weight=len(self.batches))
                 loss.backward()
                 optimizer.step()
+            if epoch % 50 == 0:
+                print(f"{epoch:4d}: {loss:f}")
         return
 
     def predict(self, samples):

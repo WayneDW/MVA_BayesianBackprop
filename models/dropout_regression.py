@@ -1,11 +1,4 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Tue Mar 31 14:22:48 2020
-
-@author: nicol
-"""
 import matplotlib.pyplot as plt
-from tqdm import tqdm
 
 import torch
 import torch.nn as nn
