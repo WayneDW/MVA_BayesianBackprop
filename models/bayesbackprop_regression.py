@@ -13,7 +13,7 @@ import torch.nn.functional as F
 from torch.utils import data
 
 
-class Varposterior():
+class VarPosterior(object):
 
     def __init__(self, mu, rho):
         self.mu = mu
@@ -29,7 +29,7 @@ class Varposterior():
         return torch.sum(-0.5 * torch.log(2 * np.pi * self.sigma ** 2) - (x - self.mu) ** 2 / self.sigma ** 2)
 
 
-class Prior():
+class Prior(object):
 
     def __init__(self, sigma1, sigma2, pi):
         self.sigma1 = sigma1
@@ -58,12 +58,12 @@ class BayesianLinear(nn.Module):
 
         self.w_mu = nn.Parameter(torch.Tensor(dim_output, dim_input).normal_(0, 1))
         self.w_rho = nn.Parameter(torch.Tensor(dim_output, dim_input).normal_(0, 1))
-        self.w = Varposterior(self.w_mu, self.w_rho)
+        self.w = VarPosterior(self.w_mu, self.w_rho)
         self.w_prior = Prior(prior_parameters['sigma1'], prior_parameters['sigma2'], prior_parameters['pi'])
 
         self.b_mu = nn.Parameter(torch.Tensor(dim_output).normal_(0, 1))
         self.b_rho = nn.Parameter(torch.Tensor(dim_output).normal_(0, 1))
-        self.b = Varposterior(self.b_mu, self.b_rho)
+        self.b = VarPosterior(self.b_mu, self.b_rho)
         self.b_prior = Prior(prior_parameters['sigma1'], prior_parameters['sigma2'], prior_parameters['pi'])
 
         self.log_prior = 0
@@ -94,13 +94,12 @@ class BayesBackpropNet(nn.Module):
         return self.fc2(F.relu(self.fc1(x)))
 
     def log_prior(self):
-        """ Compute log(p(w))
-        """
+        """ Compute log(p(w)) """
         return self.fc1.log_prior + self.fc2.log_prior
 
     def log_variational_posterior(self):
-        """ Compute log(q(w|D))
-        """
+        """ Compute log(q(w|D)) """
+
         return self.fc1.log_variational_posterior + self.fc2.log_variational_posterior
 
     def log_likelihood(self, y, output):
@@ -125,7 +124,7 @@ class BayesBackpropNet(nn.Module):
         return elbo
 
 
-class BayesBackpropReg():
+class BayesBackpropReg(object):
 
     def __init__(self, X_train, y_train, X_test, net, batch_size):
         self.net = net
@@ -134,16 +133,14 @@ class BayesBackpropReg():
         self.y_train = y_train
         self.X_test = X_test
         self.pred, self.pred_mean, self.pred_std = None, None, None
+        self.batches = self.create_batches()
 
     def create_batches(self):
         torch_train_dataset = data.TensorDataset(self.X_train, self.y_train)
-        self.batches = data.DataLoader(torch_train_dataset, batch_size=self.batch_size)
+        return data.DataLoader(torch_train_dataset, batch_size=self.batch_size)
 
     def train(self, epochs, optimizer, MC_samples, weights='uniform', pi=None):
-
         self.net.train()
-        self.create_batches()
-
         for epoch in range(int(epochs)):
             for local_batch, local_labels in self.batches:
                 optimizer.zero_grad()
@@ -164,18 +161,18 @@ class BayesBackpropReg():
 
         return self.pred_mean, self.pred_std
 
-    def plot_results(self):
+    def plot_results(self, ax=None):
+        if ax is None:
+            ax = plt.subplot()
 
         X_test = self.X_test.squeeze().numpy()
         y_pred = self.pred_mean.squeeze().numpy()
         std_pred = self.pred_std.squeeze().numpy()
 
-        plt.fill_between(X_test, y_pred - std_pred, y_pred + std_pred, color='indianred', label='1 std. int.')
-        plt.fill_between(X_test, y_pred - std_pred * 2, y_pred - std_pred, color='lightcoral')
-        plt.fill_between(X_test, y_pred + std_pred * 1, y_pred + std_pred * 2, color='lightcoral', label='2 std. int.')
-        plt.fill_between(X_test, y_pred - std_pred * 3, y_pred - std_pred * 2, color='mistyrose')
-        plt.fill_between(X_test, y_pred + std_pred * 2, y_pred + std_pred * 3, color='mistyrose', label='3 std. int.')
+        ax.fill_between(X_test, y_pred - std_pred * 3, y_pred + std_pred * 3, color='mistyrose', label='3 std. int.')
+        ax.fill_between(X_test, y_pred - std_pred * 2, y_pred + std_pred * 2, color='lightcoral', label='2 std. int.')
+        ax.fill_between(X_test, y_pred - std_pred, y_pred + std_pred, color='indianred', label='1 std. int.')
 
-        plt.scatter(self.X_train.numpy(), self.y_train.numpy(), color='red', marker='x', label="trainig points")
-        plt.plot(X_test, y_pred, color='blue', label="prediction")
+        ax.scatter(self.X_train.numpy(), self.y_train.numpy(), color='red', marker='x', label="trainig points")
+        ax.plot(X_test, y_pred, color='blue', label="prediction")
         return

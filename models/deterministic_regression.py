@@ -16,7 +16,7 @@ class DeterministicNet(nn.Module):
         return self.fc2(F.relu(self.fc1(x)))
 
 
-class DeterministicReg():
+class DeterministicReg(object):
 
     def __init__(self, X_train, y_train, X_test, net, batch_size=None):
         self.net = net
@@ -25,6 +25,7 @@ class DeterministicReg():
         self.y_train = y_train
         self.X_test = X_test
         self.pred = None
+        self.batches = None
 
     def create_batches(self):
         torch_train_dataset = data.TensorDataset(self.X_train, self.y_train)
@@ -57,7 +58,9 @@ class DeterministicReg():
         self.pred = self.net(self.X_test).squeeze().detach()
         return self.pred
 
-    def plot_results(self):
-        plt.scatter(self.X_train.numpy(), self.y_train.numpy(), color='red', marker='x', label="training points")
-        plt.plot(self.X_test.numpy(), self.pred.numpy(), color='blue', label="prediction")
+    def plot_results(self, ax=None):
+        if ax is None:
+            ax = plt.subplot()
+        ax.scatter(self.X_train.numpy(), self.y_train.numpy(), color='red', marker='x', label="training points")
+        ax.plot(self.X_test.numpy(), self.pred.numpy(), color='blue', label="prediction")
         return

@@ -5,6 +5,8 @@ Created on Tue Mar 31 14:22:48 2020
 @author: nicol
 """
 import matplotlib.pyplot as plt
+from tqdm import tqdm
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -23,7 +25,7 @@ class DropoutNet(nn.Module):
         return self.fc2(F.dropout(F.relu(self.fc1(x)), self.p))
 
 
-class DropoutReg():
+class DropoutReg(object):
 
     def __init__(self, X_train, y_train, X_test, net, batch_size):
         self.net = net
@@ -32,14 +34,14 @@ class DropoutReg():
         self.y_train = y_train
         self.X_test = X_test
         self.pred, self.pred_mean, self.pred_std = None, None, None
+        self.batches = self.create_batches()
 
     def create_batches(self):
         torch_train_dataset = data.TensorDataset(self.X_train, self.y_train)
-        self.batches = data.DataLoader(torch_train_dataset, batch_size=self.batch_size)
+        return data.DataLoader(torch_train_dataset, batch_size=self.batch_size)
 
     def train(self, epochs, optimizer, criterion):
         self.net.train()
-        self.create_batches()
         for epoch in range(int(epochs)):
             for local_batch, local_labels in self.batches:
                 optimizer.zero_grad()
@@ -62,18 +64,19 @@ class DropoutReg():
 
         return self.pred_mean, self.pred_std
 
-    def plot_results(self):
-
+    def plot_results(self, ax=None):
+        if ax is None:
+            ax = plt.subplot()
         X_test = self.X_test.squeeze().numpy()
         y_pred = self.pred_mean.squeeze().numpy()
         std_pred = self.pred_std.squeeze().numpy()
 
-        plt.fill_between(X_test, y_pred - std_pred, y_pred + std_pred, color='indianred', label='1 std. int.')
-        plt.fill_between(X_test, y_pred - std_pred * 2, y_pred - std_pred, color='lightcoral')
-        plt.fill_between(X_test, y_pred + std_pred * 1, y_pred + std_pred * 2, color='lightcoral', label='2 std. int.')
-        plt.fill_between(X_test, y_pred - std_pred * 3, y_pred - std_pred * 2, color='mistyrose')
-        plt.fill_between(X_test, y_pred + std_pred * 2, y_pred + std_pred * 3, color='mistyrose', label='3 std. int.')
+        ax.fill_between(X_test, y_pred - std_pred, y_pred + std_pred, color='indianred', label='1 std. int.')
+        ax.fill_between(X_test, y_pred - std_pred * 2, y_pred - std_pred, color='lightcoral')
+        ax.fill_between(X_test, y_pred + std_pred * 1, y_pred + std_pred * 2, color='lightcoral', label='2 std. int.')
+        ax.fill_between(X_test, y_pred - std_pred * 3, y_pred - std_pred * 2, color='mistyrose')
+        ax.fill_between(X_test, y_pred + std_pred * 2, y_pred + std_pred * 3, color='mistyrose', label='3 std. int.')
 
-        plt.scatter(self.X_train.numpy(), self.y_train.numpy(), color='red', marker='x', label="trainig points")
-        plt.plot(X_test, y_pred, color='blue', label="prediction")
+        ax.scatter(self.X_train.numpy(), self.y_train.numpy(), color='red', marker='x', label="trainig points")
+        ax.plot(X_test, y_pred, color='blue', label="prediction")
         return
