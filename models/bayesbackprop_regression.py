@@ -3,6 +3,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from tensorboardX import SummaryWriter
 from torch.utils import data
 
 
@@ -74,6 +75,10 @@ class BayesianLinear(nn.Module):
 
         return F.linear(x, w, b)
 
+    def get_weights_mu(self):
+        """ Auxiliary function used to get the weight distribution of a net """
+        return np.hstack([self.w_mu.detach().numpy().flatten(), self.b_mu.detach().numpy().flatten()])
+
 
 class BayesBackpropNet(nn.Module):
 
@@ -111,11 +116,24 @@ class BayesBackpropNet(nn.Module):
             from q(w | D))
         """
         elbo = 0
+        log_var_posteriors = 0
+        log_priors = 0
+        log_likelihoods = 0
         for s in range(MC_samples):
             out = self.forward(x)
-            elbo += (self.log_variational_posterior() - self.log_prior() - self.log_likelihood(y, out))  # * weight
+            log_var_posterior = self.log_variational_posterior()
+            log_var_posteriors += log_var_posterior
+            log_prior = self.log_prior()
+            log_priors += log_prior
+            log_likelihood = self.log_likelihood(y, out)
+            log_likelihoods += log_likelihood
+            elbo += (log_var_posterior - log_prior - log_likelihood)  # * weight
             # TODO: handle weight properly
-        return elbo / MC_samples
+        return elbo / MC_samples, log_var_posteriors / MC_samples, log_priors / MC_samples, log_likelihoods / MC_samples
+
+    def weights_dist(self):
+        """ Return flatten numpy array containing all the weights of the net """
+        return np.hstack([self.fc1.get_weights_mu(), self.fc2.get_weights_mu()])
 
 
 class BayesBackpropReg(object):
@@ -128,6 +146,7 @@ class BayesBackpropReg(object):
         self.X_test = X_test
         self.pred, self.pred_mean, self.pred_std = None, None, None
         self.batches = self.create_batches()
+        self.writer = SummaryWriter()  # to get learning curves: tensorboard --logdir=runs (in console)
 
     def create_batches(self):
         torch_train_dataset = data.TensorDataset(self.X_train, self.y_train)
@@ -135,13 +154,22 @@ class BayesBackpropReg(object):
 
     def train(self, epochs, optimizer, MC_samples, weights='uniform', pi=None):
         self.net.train()
+        count = 0
         for epoch in range(int(epochs)):
             for local_batch, local_labels in self.batches:
+                count += 1
                 optimizer.zero_grad()
                 if weights == 'uniform':
-                    loss = self.net.sample_elbo(local_batch, local_labels, MC_samples, weight=len(self.batches))
+                    loss, log_var_posterior, log_prior, log_likelihood = self.net.sample_elbo(local_batch, local_labels,
+                                                                                              MC_samples,
+                                                                                              weight=len(self.batches))
+                else:
+                    raise ValueError("wrong argument for @weight")
                 loss.backward()
                 optimizer.step()
+                self.writer.add_scalar('elbo', loss, count)
+                self.writer.add_scalar('complexity_cost', log_var_posterior - log_prior, count)
+                self.writer.add_scalar('negative log-likelihood', - log_likelihood, count)
             if epoch % 50 == 0:
                 print(f"{epoch:4d}: {loss:f}")
         return

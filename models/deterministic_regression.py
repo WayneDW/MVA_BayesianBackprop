@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import matplotlib.pyplot as plt
+import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils import data
@@ -14,6 +15,10 @@ class DeterministicNet(nn.Module):
 
     def forward(self, x):
         return self.fc2(F.relu(self.fc1(x)))
+
+    def weights_dist(self):
+        """ Return flatten numpy array containing all the weights of the net """
+        return np.hstack([self.fc1.weight.data.numpy().flatten(), self.fc2.weight.data.numpy().flatten()])
 
 
 class DeterministicReg(object):

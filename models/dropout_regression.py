@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import numpy as np
 
 import torch
 import torch.nn as nn
@@ -16,6 +17,10 @@ class DropoutNet(nn.Module):
 
     def forward(self, x):
         return self.fc2(F.dropout(F.relu(self.fc1(x)), self.p))
+
+    def weights_dist(self):
+        """ Return flatten numpy array containing all the weights of the net """
+        return np.hstack([self.fc1.weight.data.numpy().flatten(), self.fc2.weight.data.numpy().flatten()])
 
 
 class DropoutReg(object):
