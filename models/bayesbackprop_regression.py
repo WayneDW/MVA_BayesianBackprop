@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import time
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -89,7 +90,7 @@ class BayesBackpropNet(nn.Module):
         self.fc2 = BayesianLinear(dim_input=hidden_size, dim_output=dim_output
                                   , prior_parameters=prior_parameters)
 
-        self.sigma = sigma  # noise associated with the data y = f(x ; w) + N(0 , self.sigma)
+        self.sigma = sigma  # noise associated with the data y = f(x; w) + N(0, self.sigma)
 
     def forward(self, x):
         return self.fc2(F.relu(self.fc1(x)))
@@ -120,15 +121,14 @@ class BayesBackpropNet(nn.Module):
         log_priors = 0
         log_likelihoods = 0
         for s in range(MC_samples):
-            out = self.forward(x)
-            log_var_posterior = self.log_variational_posterior()
+            out = self.forward(x).squeeze()
+            log_var_posterior = self.log_variational_posterior() / weight
             log_var_posteriors += log_var_posterior
-            log_prior = self.log_prior()
+            log_prior = self.log_prior() / weight
             log_priors += log_prior
             log_likelihood = self.log_likelihood(y, out)
             log_likelihoods += log_likelihood
-            elbo += (log_var_posterior - log_prior - log_likelihood)  # * weight
-            # TODO: handle weight properly
+            elbo += log_var_posterior - log_prior - log_likelihood  # * weight
         return elbo / MC_samples, log_var_posteriors / MC_samples, log_priors / MC_samples, log_likelihoods / MC_samples
 
     def weights_dist(self):
@@ -147,6 +147,7 @@ class BayesBackpropReg(object):
         self.pred, self.pred_mean, self.pred_std = None, None, None
         self.batches = self.create_batches()
         self.writer = SummaryWriter()  # to get learning curves: tensorboard --logdir=runs (in console)
+        self.step = 0
 
     def create_batches(self):
         torch_train_dataset = data.TensorDataset(self.X_train, self.y_train)
@@ -154,10 +155,10 @@ class BayesBackpropReg(object):
 
     def train(self, epochs, optimizer, MC_samples, weights='uniform', pi=None):
         self.net.train()
-        count = 0
+        t = time.time()
         for epoch in range(int(epochs)):
             for local_batch, local_labels in self.batches:
-                count += 1
+                self.step += 1
                 optimizer.zero_grad()
                 if weights == 'uniform':
                     loss, log_var_posterior, log_prior, log_likelihood = self.net.sample_elbo(local_batch, local_labels,
@@ -167,9 +168,10 @@ class BayesBackpropReg(object):
                     raise ValueError("wrong argument for @weight")
                 loss.backward()
                 optimizer.step()
-                self.writer.add_scalar('elbo', loss, count)
-                self.writer.add_scalar('complexity_cost', log_var_posterior - log_prior, count)
-                self.writer.add_scalar('negative log-likelihood', - log_likelihood, count)
+                self.writer.add_scalar('loss/elbo', loss, self.step)
+                self.writer.add_scalar('loss/complexity_cost', log_var_posterior - log_prior, self.step)
+                self.writer.add_scalar('loss/negative log-likelihood', - log_likelihood, self.step)
+                self.writer.add_scalar('execution_time', time.time() - t, self.step)
             if epoch % 50 == 0:
                 print(f"{epoch:4d}: {loss:f}")
         return
