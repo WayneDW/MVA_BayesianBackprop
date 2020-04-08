@@ -11,14 +11,19 @@ class DeterministicNet(nn.Module):
     def __init__(self, hidden_size, dim_input, dim_output):
         super().__init__()
         self.fc1 = nn.Linear(dim_input, hidden_size)
-        self.fc2 = nn.Linear(hidden_size, dim_output)
+        self.fc2 = nn.Linear(hidden_size, hidden_size)
+        self.fc3 = nn.Linear(hidden_size, dim_output)
 
     def forward(self, x):
-        return self.fc2(F.relu(self.fc1(x)))
+        out = F.relu(self.fc1(x))
+        out = F.relu(self.fc2(out))
+        return self.fc3(out)
 
     def weights_dist(self):
         """ Return flatten numpy array containing all the weights of the net """
-        return np.hstack([self.fc1.weight.data.numpy().flatten(), self.fc2.weight.data.numpy().flatten()])
+        return np.hstack([self.fc1.weight.data.numpy().flatten(),
+                          self.fc2.weight.data.numpy().flatten(),
+                          self.fc3.weight.data.numpy().flatten()])
 
 
 class DeterministicReg(object):
