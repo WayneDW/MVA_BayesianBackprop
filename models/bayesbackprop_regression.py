@@ -173,16 +173,19 @@ class BayesBackpropReg(object):
         self.nb_batches = len(self.batches)
         self.writer = SummaryWriter()  # to get learning curves: tensorboard --logdir=runs (in console)
         self.step = 0
+        self.epoch = 0
+        self.execution_time = 0
 
     def create_batches(self):
         torch_train_dataset = data.TensorDataset(self.X_train, self.y_train)
         return data.DataLoader(torch_train_dataset, batch_size=self.batch_size)
 
-    def train(self, epochs, optimizer, MC_samples, weights='uniform', pi=None):
+    def train(self, epochs, optimizer, MC_samples, weights='uniform'):
         self.net.train()
-        t = time.time()
-        for epoch in range(int(epochs)):
+        for _ in range(int(epochs)):
             i = 0
+            t = time.time()
+            self.epoch += 1
             elbos, log_var_posteriors, log_priors, log_likelihoods = 0, 0, 0, 0
             for local_batch, local_labels in self.batches:
                 i += 1
@@ -202,12 +205,13 @@ class BayesBackpropReg(object):
                 log_var_posteriors += log_var_posterior
                 log_priors += log_prior
                 log_likelihoods += log_likelihood
-            self.writer.add_scalar('loss/elbo', elbos, epoch)
-            self.writer.add_scalar('loss/complexity_cost', log_var_posteriors - log_priors, epoch)
-            self.writer.add_scalar('loss/negative log-likelihood', - log_likelihoods, epoch)
-            self.writer.add_scalar('execution_time', time.time() - t, epoch)
-            if epoch % 50 == 0:
-                print(f"{epoch:4d}: {elbos:f}")
+            self.execution_time += time.time() - t
+            self.writer.add_scalar('loss/elbo', elbos, self.epoch)
+            self.writer.add_scalar('loss/complexity_cost', log_var_posteriors - log_priors, self.epoch)
+            self.writer.add_scalar('loss/negative log-likelihood', - log_likelihoods, self.epoch)
+            self.writer.add_scalar('execution_time', self.execution_time, self.epoch)
+            if self.epoch % 50 == 0:
+                print(f"{self.epoch:4d}: {elbos:f}")
         return
 
     def predict(self, samples):
@@ -236,28 +240,3 @@ class BayesBackpropReg(object):
         ax.scatter(self.X_train.numpy(), self.y_train.numpy(), color='red', marker='x', label="training points")
         ax.plot(X_test, y_pred, color='blue', label="prediction")
         return
-
-
-if __name__ == '__main__':
-    N = 100  # number of training data points
-    sigma = 0.02
-    dataset = {}
-
-
-    def function(x, epsilon):
-        return x + 0.3 * np.sin(2 * np.pi * (x + epsilon)) + 0.3 * np.sin(4 * np.pi * (x + epsilon)) + epsilon
-
-
-    dataset['X_train'] = np.random.uniform(0, 0.5, N)
-    dataset['y_train'] = function(dataset['X_train'], np.random.normal(0, sigma, N))
-    X_train_tensor = torch.from_numpy(dataset['X_train'].copy()).float().unsqueeze(dim=1)
-    y_train_tensor = torch.from_numpy(dataset['y_train'].copy()).float()
-    dataset['X_test'] = np.linspace(-0.25, 1, 1000)
-    X_test_tensor = torch.from_numpy(dataset['X_test'].copy()).float().unsqueeze(dim=1)
-
-    prior_parameters = {'sigma1': 1, 'sigma2': np.exp(-6), 'pi': 0.5}
-    net = BayesBackpropNet(hidden_size=100, dim_input=1, dim_output=1, prior_parameters=prior_parameters, sigma=0.1)
-    reg_model = BayesBackpropReg(X_train_tensor, y_train_tensor, X_test_tensor, net, batch_size=10)
-
-    optimizer = torch.optim.Adam(net.parameters(), lr=0.001, weight_decay=1e-6)
-    reg_model.train(1000, optimizer, 2)
