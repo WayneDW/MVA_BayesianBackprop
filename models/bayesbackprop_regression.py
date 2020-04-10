@@ -8,47 +8,46 @@ import torch.nn.functional as F
 from tensorboardX import SummaryWriter
 from torch.utils import data
 
-#This file proposes an implementation of the Bayes by backprop method (Blundell
-#et al. "Weight Uncertainty in Neural Networks") for a regression problem (with
-#gaussian noise).
-#https://arxiv.org/abs/1505.05424
 
-#The file is attached with a jupyter notebook "regression.ipynb" which illustrates
-#the method in a simple case.
+# This file proposes an implementation of the Bayes by backprop method (Blundell
+# et al. "Weight Uncertainty in Neural Networks") for a regression problem (with
+# gaussian noise).
+# https://arxiv.org/abs/1505.05424
+
+# The file is attached with a jupyter notebook "regression.ipynb" which illustrates
+# the method in a simple case.
 
 class VarPosterior(object):
-    
-    """ Defines the variational posterior distribution q(w) for the weights of 
+    """ Defines the variational posterior distribution q(w) for the weights of
         the network.
         
         Here we suppose that q(w) = N(mu , log(1 + exp(rho))).
     """
-    
+
     def __init__(self, mu, rho):
         self.mu = mu
         self.rho = rho
         self.gaussian = torch.distributions.Normal(0, 1)
 
     @property
-    def sigma(self):         
-        """Returns the variance of the distribution sigma = log(1 + exp(rho))"""           
+    def sigma(self):
+        """Returns the variance of the distribution sigma = log(1 + exp(rho))"""
         return torch.log1p(torch.exp(self.rho))
 
-    def sample(self):        
-        """Samples mu + sigma*N(0 , 1)"""        
+    def sample(self):
+        """Samples mu + sigma*N(0 , 1)"""
         epsilon = self.gaussian.sample(self.rho.size())
         return self.mu + self.sigma * epsilon
 
-    def log_prob(self, x):        
+    def log_prob(self, x):
         """Returns the log-distribution of a vector x whose each component is 
            independently distributed according to q(w).
-        """        
-        return torch.sum(-0.5 * torch.log(2 * np.pi * self.sigma ** 2) 
-                                  - 0.5 * (x - self.mu) ** 2 / self.sigma ** 2)
+        """
+        return torch.sum(-0.5 * torch.log(2 * np.pi * self.sigma ** 2)
+                         - 0.5 * (x - self.mu) ** 2 / self.sigma ** 2)
 
 
 class Prior(object):
-    
     """ Defines the prior distribution p(w) for the weights of the network.
     
         Here we suppose that p(w) = pi*N(0 , sigma1) + (1 - pi)*N(0 , sigma2).
@@ -73,23 +72,22 @@ class Prior(object):
            independently distributed according to p(w).
            
            We use a filter to deal with Nan values.
-        """  
-        filter = self.gaussian1.log_prob(x) > self.gaussian2.log_prob(x)
-        result = torch.sum(np.log(self.pi) + self.gaussian1.log_prob(x)[filter] + torch.log1p(
+        """
+        filtr = self.gaussian1.log_prob(x) > self.gaussian2.log_prob(x)
+        result = torch.sum(np.log(self.pi) + self.gaussian1.log_prob(x)[filtr] + torch.log1p(
             (1 - self.pi) / self.pi * torch.exp(
-                self.gaussian2.log_prob(x)[filter] - self.gaussian1.log_prob(x)[filter])))
-        assert np.inf > result > -np.inf, (result, filter, x[filter])
-        result += torch.sum(np.log(1 - self.pi) + self.gaussian2.log_prob(x)[~filter] + torch.log1p(
+                self.gaussian2.log_prob(x)[filtr] - self.gaussian1.log_prob(x)[filtr])))
+        assert np.inf > result > -np.inf, (result, filtr, x[filtr])
+        result += torch.sum(np.log(1 - self.pi) + self.gaussian2.log_prob(x)[~filtr] + torch.log1p(
             self.pi / (1 - self.pi) * torch.exp(
-                self.gaussian1.log_prob(x)[~filter] - self.gaussian2.log_prob(x)[~filter])))
-        assert np.inf > result > -np.inf, (result, filter, x[~filter])
+                self.gaussian1.log_prob(x)[~filtr] - self.gaussian2.log_prob(x)[~filtr])))
+        assert np.inf > result > -np.inf, (result, filtr, x[~filtr])
         return result
-        #return torch.sum(torch.log(self.pi * self.gaussian1.log_prob(x).exp() 
+        # return torch.sum(torch.log(self.pi * self.gaussian1.log_prob(x).exp()
         #                             + (1 - self.pi) * self.gaussian2.log_prob(x).exp())                           )
 
 
 class BayesianLinear(nn.Module):
-    
     """ Defines a linear layer for a neural network.
     
         The weights w are distributed according to the posterior q(w ; w_mu , w_rho)
@@ -97,7 +95,7 @@ class BayesianLinear(nn.Module):
         
         w and b are associated with priors p(w ; sigma1,sigma2,pi) and p(b ; sigma1,sigma2,pi)
     """
-    
+
     def __init__(self, dim_input, dim_output, prior_parameters):
         super(BayesianLinear, self).__init__()
 
@@ -131,20 +129,19 @@ class BayesianLinear(nn.Module):
 
         return F.linear(x, w, b)
 
-    def get_weights_mu(self):        
-        """ Auxiliary function used to get the weight distribution of a net """        
+    def get_weights_mu(self):
+        """ Auxiliary function used to get the weight distribution of a net """
         return np.hstack([self.w_mu.detach().numpy().flatten(), self.b_mu.detach().numpy().flatten()])
 
 
 class BayesBackpropNet(nn.Module):
-    
     """ Defines a neural-network with one hidden layer with size hidden-size and
         relu activation. Each layer is a BayesianLinear layer defined as above.
         
         Builds the ELBO function associated with the network:
             KL(q(w) ||p(w)) - E[log(p(D | w))]  (w: all the parameters of the network)
     """
-    
+
     def __init__(self, hidden_size, dim_input, dim_output, prior_parameters, sigma):
         super(BayesBackpropNet, self).__init__()
         self.fc1 = BayesianLinear(dim_input=dim_input, dim_output=hidden_size
@@ -157,20 +154,20 @@ class BayesBackpropNet(nn.Module):
     def forward(self, x):
         return self.fc2(F.relu(self.fc1(x)))
 
-    def log_prior(self):        
-        """ Computes log(p(w)) """        
+    def log_prior(self):
+        """ Computes log(p(w)) """
         return self.fc1.log_prior + self.fc2.log_prior
 
-    def log_variational_posterior(self):        
-        """ Computes log(q(w|D)) """        
-        return self.fc1.log_variational_posterior + self.fc2.log_variational_posterior 
+    def log_variational_posterior(self):
+        """ Computes log(q(w|D)) """
+        return self.fc1.log_variational_posterior + self.fc2.log_variational_posterior
 
-    def log_likelihood(self, y, output):        
+    def log_likelihood(self, y, output):
         """ Computes log(p(D|w))
         
             Rmk: y_i = f(x_i ; w) + epsilon (epsilon ~ N(0 , self.sigma)) 
                  So we have p(y_i | x_i , w) = N(f(x_i ; w) , self.sigma)
-        """        
+        """
         return torch.sum(-0.5 * np.log(2 * np.pi * self.sigma ** 2) - 0.5 * (y - output) ** 2 / self.sigma ** 2)
 
     def sample_elbo(self, x, y, MC_samples, weight):
@@ -184,18 +181,18 @@ class BayesBackpropNet(nn.Module):
         log_likelihoods = 0
         for s in range(MC_samples):
             out = self.forward(x).squeeze()
-            
+
             log_var_posterior = self.log_variational_posterior() * weight
             log_var_posteriors += log_var_posterior
-            
+
             log_prior = self.log_prior() * weight
             log_priors += log_prior
-            
+
             log_likelihood = self.log_likelihood(y, out)
             log_likelihoods += log_likelihood
-            
-            elbo += log_var_posterior - log_prior - log_likelihood 
-            
+
+            elbo += log_var_posterior - log_prior - log_likelihood
+
         return elbo / MC_samples, log_var_posteriors / MC_samples, log_priors / MC_samples, log_likelihoods / MC_samples
 
     def weights_dist(self):
@@ -205,7 +202,6 @@ class BayesBackpropNet(nn.Module):
 
 
 class BayesBackpropReg(object):
-    
     """Defines the regression model for the Bayes by backprop model.
        The training set (X_train , y_train) and the test set X_test are given.
     """
@@ -250,7 +246,7 @@ class BayesBackpropReg(object):
                 self.step += 1
                 optimizer.zero_grad()
                 if weights == 'uniform':
-                    weight = 1/ len(self.batches)
+                    weight = 1 / len(self.batches)
                 elif weights == 'geometric':
                     weight = 2 ** (self.nb_batches - i) / (2 ** self.nb_batches - 1)
                 else:
@@ -264,21 +260,21 @@ class BayesBackpropReg(object):
                 log_priors += log_prior
                 log_likelihoods += log_likelihood
             self.execution_time += time.time() - t
-            
+
             self.writer.add_scalar('loss/elbo', elbos, self.epoch)
             self.writer.add_scalar('loss/complexity_cost', log_var_posteriors - log_priors, self.epoch)
             self.writer.add_scalar('loss/negative log-likelihood', - log_likelihoods, self.epoch)
             self.writer.add_scalar('execution_time', self.execution_time, self.epoch)
             if self.epoch % 100 == 0:
-                print("Epoch: %4d/%4d, elbo loss = %8.3f, KL = %8.3f, -log-likelihood = %6.3f" %
-                          (self.epoch, epochs, elbos, log_var_posteriors - log_priors ,- log_likelihoods))
+                print("Epoch: %4d/%4d, elbo loss = %8.1f, KL = %8.1f, -log-likelihood = %6.1f" %
+                      (self.epoch, epochs, elbos, log_var_posteriors - log_priors, - log_likelihoods))
         return
 
     def predict(self, samples):
         """ Runs a Monte Carlo algorithm for the prediction of the network.
             Aggregates all the predictions and return the mean and the standard
             deviation.
-        """ 
+        """
         self.net.eval()
         self.pred = torch.zeros((self.X_test.shape[0], self.y_train.unsqueeze(dim=1).shape[1], samples))
         for s in range(samples):
