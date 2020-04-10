@@ -18,12 +18,13 @@ from torch.utils import data
 # the method in a simple case.
 
 class VarPosterior(object):
-    """ Defines the variational posterior distribution q(w) for the weights of
+    
+    """ Defines the variational posterior distribution q(w) for the weights of 
         the network.
         
         Here we suppose that q(w) = N(mu , log(1 + exp(rho))).
     """
-
+    
     def __init__(self, mu, rho):
         self.mu = mu
         self.rho = rho
@@ -48,6 +49,7 @@ class VarPosterior(object):
 
 
 class Prior(object):
+    
     """ Defines the prior distribution p(w) for the weights of the network.
     
         Here we suppose that p(w) = pi*N(0 , sigma1) + (1 - pi)*N(0 , sigma2).
@@ -71,23 +73,16 @@ class Prior(object):
         """Returns the log-distribution of a vector x whose each component is 
            independently distributed according to p(w).
            
-           We use a filter to deal with Nan values.
+           To deal with overflows we compute:
+               log(pi) + log(Gauss1) + log(1 + (1 - pi)/pi * Gauss2/Gauss1)
         """
-        filtr = self.gaussian1.log_prob(x) > self.gaussian2.log_prob(x)
-        result = torch.sum(np.log(self.pi) + self.gaussian1.log_prob(x)[filtr] + torch.log1p(
-            (1 - self.pi) / self.pi * torch.exp(
-                self.gaussian2.log_prob(x)[filtr] - self.gaussian1.log_prob(x)[filtr])))
-        assert np.inf > result > -np.inf, (result, filtr, x[filtr])
-        result += torch.sum(np.log(1 - self.pi) + self.gaussian2.log_prob(x)[~filtr] + torch.log1p(
-            self.pi / (1 - self.pi) * torch.exp(
-                self.gaussian1.log_prob(x)[~filtr] - self.gaussian2.log_prob(x)[~filtr])))
-        assert np.inf > result > -np.inf, (result, filtr, x[~filtr])
-        return result
-        # return torch.sum(torch.log(self.pi * self.gaussian1.log_prob(x).exp()
-        #                             + (1 - self.pi) * self.gaussian2.log_prob(x).exp())                           )
+        function = lambda x: x*np.exp(-x**2)
+        return torch.sum(np.log(self.pi) + self.gaussian1.log_prob(x)
+                            + np.log1p( ((1 - self.pi) / self.pi)*function(self.sigma1/self.sigma2)))
 
 
 class BayesianLinear(nn.Module):
+    
     """ Defines a linear layer for a neural network.
     
         The weights w are distributed according to the posterior q(w ; w_mu , w_rho)
@@ -135,6 +130,7 @@ class BayesianLinear(nn.Module):
 
 
 class BayesBackpropNet(nn.Module):
+    
     """ Defines a neural-network with one hidden layer with size hidden-size and
         relu activation. Each layer is a BayesianLinear layer defined as above.
         
@@ -202,6 +198,7 @@ class BayesBackpropNet(nn.Module):
 
 
 class BayesBackpropReg(object):
+    
     """Defines the regression model for the Bayes by backprop model.
        The training set (X_train , y_train) and the test set X_test are given.
     """
