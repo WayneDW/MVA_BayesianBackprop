@@ -72,20 +72,12 @@ class Prior(object):
         """Returns the log-distribution of a vector x whose each component is 
            independently distributed according to p(w).
            
-           We use a filter to deal with Nan values.
+           To deal with overflows we compute:
+               log(pi) + log(Gauss1) + log(1 + (1 - pi)/pi * Gauss2/Gauss1)
         """  
-        filter = self.gaussian1.log_prob(x) > self.gaussian2.log_prob(x)
-        result = torch.sum(np.log(self.pi) + self.gaussian1.log_prob(x)[filter] + torch.log1p(
-            (1 - self.pi) / self.pi * torch.exp(
-                self.gaussian2.log_prob(x)[filter] - self.gaussian1.log_prob(x)[filter])))
-        assert np.inf > result > -np.inf, (result, filter, x[filter])
-        result += torch.sum(np.log(1 - self.pi) + self.gaussian2.log_prob(x)[~filter] + torch.log1p(
-            self.pi / (1 - self.pi) * torch.exp(
-                self.gaussian1.log_prob(x)[~filter] - self.gaussian2.log_prob(x)[~filter])))
-        assert np.inf > result > -np.inf, (result, filter, x[~filter])
-        return result
-        #return torch.sum(torch.log(self.pi * self.gaussian1.log_prob(x).exp() 
-        #                             + (1 - self.pi) * self.gaussian2.log_prob(x).exp())                           )
+        function = lambda x: x*np.exp(-x**2)
+        return torch.sum(np.log(self.pi) + self.gaussian1.log_prob(x) 
+                            + np.log1p( ((1 - self.pi) / self.pi)*function(self.sigma1/self.sigma2)))                  
 
 
 class BayesianLinear(nn.Module):
