@@ -71,9 +71,21 @@ class Prior(object):
     def log_prob(self, x):
         """Returns the log-distribution of a vector x whose each component is 
            independently distributed according to p(w).
+           
+           We use a filter to deal with Nan values.
         """  
-        return torch.sum(torch.log(self.pi * self.gaussian1.log_prob(x).exp() 
-                                     + (1 - self.pi) * self.gaussian2.log_prob(x).exp())                           )
+        filter = self.gaussian1.log_prob(x) > self.gaussian2.log_prob(x)
+        result = torch.sum(np.log(self.pi) + self.gaussian1.log_prob(x)[filter] + torch.log1p(
+            (1 - self.pi) / self.pi * torch.exp(
+                self.gaussian2.log_prob(x)[filter] - self.gaussian1.log_prob(x)[filter])))
+        assert np.inf > result > -np.inf, (result, filter, x[filter])
+        result += torch.sum(np.log(1 - self.pi) + self.gaussian2.log_prob(x)[~filter] + torch.log1p(
+            self.pi / (1 - self.pi) * torch.exp(
+                self.gaussian1.log_prob(x)[~filter] - self.gaussian2.log_prob(x)[~filter])))
+        assert np.inf > result > -np.inf, (result, filter, x[~filter])
+        return result
+        #return torch.sum(torch.log(self.pi * self.gaussian1.log_prob(x).exp() 
+        #                             + (1 - self.pi) * self.gaussian2.log_prob(x).exp())                           )
 
 
 class BayesianLinear(nn.Module):
@@ -257,7 +269,7 @@ class BayesBackpropReg(object):
             self.writer.add_scalar('loss/complexity_cost', log_var_posteriors - log_priors, self.epoch)
             self.writer.add_scalar('loss/negative log-likelihood', - log_likelihoods, self.epoch)
             self.writer.add_scalar('execution_time', self.execution_time, self.epoch)
-            if self.epoch % 50 == 0:
+            if self.epoch % 100 == 0:
                 print("Epoch: %4d/%4d, elbo loss = %8.3f, KL = %8.3f, -log-likelihood = %6.3f" %
                           (self.epoch, epochs, elbos, log_var_posteriors - log_priors ,- log_likelihoods))
         return
