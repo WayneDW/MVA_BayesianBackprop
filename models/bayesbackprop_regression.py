@@ -8,14 +8,16 @@ import torch.nn.functional as F
 from tensorboardX import SummaryWriter
 from torch.utils import data
 
+"""
+This file proposes an implementation of the Bayes by backprop method (Blundell
+et al. "Weight Uncertainty in Neural Networks") for a regression problem (with
+gaussian noise).
+https://arxiv.org/abs/1505.05424
 
-# This file proposes an implementation of the Bayes by backprop method (Blundell
-# et al. "Weight Uncertainty in Neural Networks") for a regression problem (with
-# gaussian noise).
-# https://arxiv.org/abs/1505.05424
+The file is attached with a jupyter notebook "regression.ipynb" which illustrates
+the method in a simple case.
+"""
 
-# The file is attached with a jupyter notebook "regression.ipynb" which illustrates
-# the method in a simple case.
 
 class VarPosterior(object):
     """ Defines the variational posterior distribution q(w) for the weights of
@@ -194,8 +196,8 @@ class BayesBackpropNet(nn.Module):
 
 
 class BayesBackpropReg(object):
-    """Defines the regression model for the Bayes by backprop model.
-       The training set (X_train , y_train) and the test set X_test are given.
+    """ Defines the regression model for the Bayes by backprop model.
+        The training set (X_train , y_train) and the test set X_test are given.
     """
 
     def __init__(self, X_train, y_train, X_test, net, batch_size):

@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from models.RL.nets import RLReg
+from models.RL.rl_utils import RLReg, AgentBayesBackprop
 from models.bayesbackprop_regression import BayesianLinear
 
 
@@ -74,11 +74,12 @@ class BayesBackpropRLNet(nn.Module):
 
 
 class BayesRLReg(RLReg):
+    """ Class for training an AgentB """
 
     def __init__(self, X_train, y_train, agent, buffer_size=4096, minibatch_size=64, burn_in=500):
         super(BayesRLReg, self).__init__(X_train, y_train, agent, buffer_size, minibatch_size, burn_in)
 
-    def aux_optimization_(self, context_inds, actions, rewards):
+    def get_loss_(self, context_inds, actions, rewards):
         loss, log_var_posterior, log_prior, log_likelihood = self.agent.net.sample_elbo(self.X_train[context_inds],
                                                                                         rewards, actions,
                                                                                         self.agent.sample,

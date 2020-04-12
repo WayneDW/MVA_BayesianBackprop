@@ -6,17 +6,19 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils import data
 
+""" 
+This file proposes an implementation of the MC dropout method for bayesian
+neural network in the case of regression problems.
 
-# This file proposes an implementation of the MC dropout method for bayesian
-# neural network in the case of regression problems.
+The file is attached with a jupyter notebook "regression.ipynb" which illustrates
+the method in a simple case.
+"""
 
-# The file is attached with a jupyter notebook "regression.ipynb" which illustrates
-# the method in a simple case.
 
 class DropoutNet(nn.Module):
-    """Defines a neural network with one hidden layer with size hidden_size and
-       a relu activation.
-       Applies dropout with probability p after the relu function.
+    """ Defines a neural network with one hidden layer with size hidden_size and
+        a relu activation.
+        Applies dropout with probability p after the relu function.
     """
 
     def __init__(self, hidden_size, dim_input, dim_output, p):
@@ -24,6 +26,7 @@ class DropoutNet(nn.Module):
         self.fc1 = nn.Linear(dim_input, hidden_size)
         self.fc2 = nn.Linear(hidden_size, dim_output)
         self.p = p
+        self.layers = [self.fc1, self.fc2]
 
     def forward(self, x):
         out = F.dropout(F.relu(self.fc1(x)), self.p)
@@ -31,8 +34,7 @@ class DropoutNet(nn.Module):
 
     def weights_dist(self):
         """ Return flatten numpy array containing all the weights of the net """
-        return np.hstack([self.fc1.weight.data.numpy().flatten(),
-                          self.fc2.weight.data.numpy().flatten()])
+        return np.hstack(list(map(lambda layer: layer.weight.data.numpy().flatten(), self.layers)))
 
 
 class DropoutReg(object):
@@ -103,6 +105,6 @@ class DropoutReg(object):
         ax.fill_between(X_test, y_pred - std_pred * 3, y_pred - std_pred * 2, color='mistyrose')
         ax.fill_between(X_test, y_pred + std_pred * 2, y_pred + std_pred * 3, color='mistyrose', label='3 std. int.')
 
-        ax.scatter(self.X_train.numpy(), self.y_train.numpy(), color='red', marker='x', label="trainig points")
+        ax.scatter(self.X_train.numpy(), self.y_train.numpy(), color='red', marker='x', label="training points")
         ax.plot(X_test, y_pred, color='blue', label="prediction")
         return

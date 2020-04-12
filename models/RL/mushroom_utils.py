@@ -1,5 +1,6 @@
 import os
 
+import matplotlib.pyplot as plt
 import pandas as pd
 from mpl_toolkits.mplot3d import Axes3D
 from sklearn import decomposition
@@ -28,8 +29,10 @@ def load_mushroom(random_state=42, train_frac=0.8):
     return mushroom_df, train_X, train_y, test_X, test_y
 
 
-def plot_points(mushroom_df, train_X, test_X, fig):
+def plot_points(mushroom_df, train_X, test_X, fig=None):
     """ Plot 3D projection of mushroom dataset (PCA) """
+    if fig is None:
+        fig = plt.figure(figsize=(10, 8))
     ax = Axes3D(fig, rect=[0, 0, .95, 1])
 
     pca = decomposition.PCA(n_components=3)
