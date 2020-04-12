@@ -3,8 +3,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from models.RL.rl_utils import RLReg, AgentBayesBackprop
-from models.bayesbackprop_regression import BayesianLinear
+from models.RL.rl_utils import RLReg
+from models.regression.bayesbackprop_regression import BayesianLinear
 
 
 class BayesBackpropRLNet(nn.Module):

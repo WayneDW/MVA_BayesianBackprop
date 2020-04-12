@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from models.RL.rl_utils import RLReg, AgentDN
+from models.RL.rl_utils import RLReg
 
 
 class DeterministicRLNet(nn.Module):

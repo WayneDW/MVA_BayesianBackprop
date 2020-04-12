@@ -1,8 +1,8 @@
 import numpy as np
 import torch
 
-from models.RL.rl_utils import RLReg, AgentDropout
-from ..dropout_regression import DropoutNet
+from models.RL.rl_utils import RLReg
+from models.regression.dropout_regression import DropoutNet
 
 
 class DropoutRLNet(DropoutNet):
