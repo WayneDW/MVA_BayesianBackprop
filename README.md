@@ -9,7 +9,9 @@ We provide notebooks to run experiments:
 * [Non-linear regression with "Bayesian by backprop"](regression.ipynb)
 * [Contextual bandit with "Bayesian by backprop" on mushrooms data set](RL.ipynb)
 
-## Pyro
+## Codes
+
+In [models](models) you will find all our algorithms that we use for the experiments.
 
 In [Pyro](Pyro) you will find a work in progress on an implementation of the "Bayes by backprop" method in Pyro for non-linear regression.
 
