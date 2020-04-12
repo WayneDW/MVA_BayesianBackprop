@@ -6,14 +6,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils import data
 
-#This file proposes an implementation of the MC dropout method for bayesian 
-#neural network in the case of regression problems.
 
-#The file is attached with a jupyter notebook "regression.ipynb" which illustrates
-#the method in a simple case.
+# This file proposes an implementation of the MC dropout method for bayesian
+# neural network in the case of regression problems.
+
+# The file is attached with a jupyter notebook "regression.ipynb" which illustrates
+# the method in a simple case.
 
 class DropoutNet(nn.Module):
-    
     """Defines a neural network with one hidden layer with size hidden_size and
        a relu activation.
        Applies dropout with probability p after the relu function.
@@ -36,12 +36,11 @@ class DropoutNet(nn.Module):
 
 
 class DropoutReg(object):
-    
-    """Defines the regression model for a neural network with dropout (during 
+    """Defines the regression model for a neural network with dropout (during
        training and test steps).
        The training set (X_train , y_train) and the test set X_test are given.
     """
-    
+
     def __init__(self, X_train, y_train, X_test, net, batch_size):
         self.net = net
         self.batch_size = batch_size
@@ -55,13 +54,13 @@ class DropoutReg(object):
         torch_train_dataset = data.TensorDataset(self.X_train, self.y_train)
         return data.DataLoader(torch_train_dataset, batch_size=self.batch_size)
 
-    def train(self, epochs, optimizer, criterion):        
+    def train(self, epochs, optimizer, criterion):
         """ Optimizes the parameters of the network to minimize the
             criterion.
             
             epochs: number of optimization steps
             optimizer: torch.optim.Adam(), torch.optim.SGD...
-        """        
+        """
         self.net.train()
         for epoch in range(int(epochs)):
             for local_batch, local_labels in self.batches:
@@ -72,11 +71,11 @@ class DropoutReg(object):
                 optimizer.step()
         return
 
-    def predict(self, samples):       
+    def predict(self, samples):
         """ Runs a Monte Carlo algorithm for the prediction of the network.
             Aggregates all the predictions and returns the mean and the standard
             deviation.
-        """        
+        """
         self.net.eval()
         self.net.training = True
         self.pred = torch.zeros((self.X_test.shape[0], self.y_train.unsqueeze(dim=1).shape[1], samples))
@@ -88,7 +87,7 @@ class DropoutReg(object):
 
         return self.pred_mean, self.pred_std
 
-    def plot_results(self, ax=None):       
+    def plot_results(self, ax=None):
         """ Plots the training points, the mean prediction of the network for
             X_test, and the confidence intervals for std, 2*std and 3*std.
         """

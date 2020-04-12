@@ -4,7 +4,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from models.RL.nets import RLReg
-from models.RL.rl_utils import AgentBBNet
 from models.bayesbackprop_regression import BayesianLinear
 
 
@@ -54,41 +53,34 @@ class BayesBackpropRLNet(nn.Module):
         """
         return torch.sum(-0.5 * np.log(2 * np.pi * self.sigma ** 2) - 0.5 * (y - output) ** 2 / self.sigma ** 2)
 
-    def sample_elbo(self, x, y, actions, MC_samples, weight):
+    def sample_elbo(self, x, y, actions, MC_samples):
         """ For a batch x computes weight * E(log(q(w)) - log(p(w))) - E(log(p(D |w)))
             The expected values are computed with a MC scheme (at each step w is sampled
             from q(w)).
         """
-        elbo = 0
-        log_var_posteriors = 0
-        log_priors = 0
+        log_var_posterior = self.log_variational_posterior()
+        log_prior = self.log_prior()
+
         log_likelihoods = 0
-        for s in range(MC_samples):
-            out = self.forward(x).squeeze()[np.arange(x.shape[0]), actions]
-
-            log_var_posterior = self.log_variational_posterior() * weight
-            log_var_posteriors += log_var_posterior
-
-            log_prior = self.log_prior() * weight
-            log_priors += log_prior
-
-            log_likelihood = self.log_likelihood(y, out)
+        outs = self.forward(torch.repeat_interleave(x, MC_samples, dim=1))[np.arange(x.shape[0]), ..., actions]
+        for i in range(MC_samples):
+            log_likelihood = self.log_likelihood(y, outs[:, i])
             log_likelihoods += log_likelihood
+        log_likelihoods /= MC_samples
 
-            elbo += log_var_posterior - log_prior - log_likelihood
+        elbo = log_var_posterior - log_prior - log_likelihoods
 
-        return elbo / MC_samples, log_var_posteriors / MC_samples, log_priors / MC_samples, log_likelihoods / MC_samples
+        return elbo, log_var_posterior, log_prior, log_likelihoods
 
 
 class BayesRLReg(RLReg):
 
     def __init__(self, X_train, y_train, agent, buffer_size=4096, minibatch_size=64, burn_in=500):
-        assert type(agent) == AgentBBNet, (type(agent), AgentBBNet)
         super(BayesRLReg, self).__init__(X_train, y_train, agent, buffer_size, minibatch_size, burn_in)
 
     def aux_optimization_(self, context_inds, actions, rewards):
         loss, log_var_posterior, log_prior, log_likelihood = self.agent.net.sample_elbo(self.X_train[context_inds],
                                                                                         rewards, actions,
                                                                                         self.agent.sample,
-                                                                                        weight=1 / self.agent.sample)
+                                                                                        )
         return loss

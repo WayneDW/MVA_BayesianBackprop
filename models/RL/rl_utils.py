@@ -1,6 +1,7 @@
 from collections import deque
 
 import numpy as np
+import torch
 
 
 class Agent(object):
@@ -26,7 +27,10 @@ class AgentDN(Agent):
         self.net = net
 
     def evaluate(self, context):
-        return self.net(context).squeeze()
+        if context.ndim > 2:
+            return self.net(context).mean(axis=1)
+        else:
+            return self.net(context).squeeze()
 
     def train(self):
         self.net.train()
@@ -60,13 +64,13 @@ class AgentBBNet(AgentDN):
         self.sample = sample
 
     def act(self, context):
-        predictions = self.evaluate(context)
-        for _ in range(self.sample - 1):
-            predictions += self.evaluate(context)
+        if context.ndim < 3:
+            context = context.unsqueeze(0)
+        predictions = self.evaluate(torch.repeat_interleave(context, self.sample, dim=1))
         return predictions.argmax(axis=-1).squeeze()
 
 
-class Env(object):
+class EnvMushroom(object):
 
     def __init__(self, context_inds, classes):
         self.context_inds = context_inds

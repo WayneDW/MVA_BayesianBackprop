@@ -18,13 +18,12 @@ from torch.utils import data
 # the method in a simple case.
 
 class VarPosterior(object):
-    
-    """ Defines the variational posterior distribution q(w) for the weights of 
+    """ Defines the variational posterior distribution q(w) for the weights of
         the network.
         
         Here we suppose that q(w) = N(mu , log(1 + exp(rho))).
     """
-    
+
     def __init__(self, mu, rho):
         self.mu = mu
         self.rho = rho
@@ -49,7 +48,6 @@ class VarPosterior(object):
 
 
 class Prior(object):
-    
     """ Defines the prior distribution p(w) for the weights of the network.
     
         Here we suppose that p(w) = pi*N(0 , sigma1) + (1 - pi)*N(0 , sigma2).
@@ -76,13 +74,12 @@ class Prior(object):
            To deal with overflows we compute:
                log(pi) + log(Gauss1) + log(1 + (1 - pi)/pi * Gauss2/Gauss1)
         """
-        function = lambda x: x*np.exp(-x**2)
+        function = lambda x: x * np.exp(-x ** 2)
         return torch.sum(np.log(self.pi) + self.gaussian1.log_prob(x)
-                            + np.log1p( ((1 - self.pi) / self.pi)*function(self.sigma1/self.sigma2)))
+                         + np.log1p(((1 - self.pi) / self.pi) * function(self.sigma1 / self.sigma2)))
 
 
 class BayesianLinear(nn.Module):
-    
     """ Defines a linear layer for a neural network.
     
         The weights w are distributed according to the posterior q(w ; w_mu , w_rho)
@@ -130,7 +127,6 @@ class BayesianLinear(nn.Module):
 
 
 class BayesBackpropNet(nn.Module):
-    
     """ Defines a neural-network with one hidden layer with size hidden-size and
         relu activation. Each layer is a BayesianLinear layer defined as above.
         
@@ -146,17 +142,18 @@ class BayesBackpropNet(nn.Module):
                                   , prior_parameters=prior_parameters)
 
         self.sigma = sigma  # noise associated with the data y = f(x; w) + N(0, self.sigma)
+        self.layers = [self.fc1, self.fc2]
 
     def forward(self, x):
         return self.fc2(F.relu(self.fc1(x)))
 
     def log_prior(self):
         """ Computes log(p(w)) """
-        return self.fc1.log_prior + self.fc2.log_prior
+        return sum(map(lambda fc: fc.log_prior, self.layers))
 
     def log_variational_posterior(self):
         """ Computes log(q(w|D)) """
-        return self.fc1.log_variational_posterior + self.fc2.log_variational_posterior
+        return sum(map(lambda fc: fc.log_variational_posterior, self.layers))
 
     def log_likelihood(self, y, output):
         """ Computes log(p(D|w))
@@ -193,12 +190,10 @@ class BayesBackpropNet(nn.Module):
 
     def weights_dist(self):
         """ Return flatten numpy array containing all the weights of the net """
-        return np.hstack([self.fc1.get_weights_mu(),
-                          self.fc2.get_weights_mu()])
+        return np.hstack(list(map(lambda layer: layer.get_weights_mu(), self.layers)))
 
 
 class BayesBackpropReg(object):
-    
     """Defines the regression model for the Bayes by backprop model.
        The training set (X_train , y_train) and the test set X_test are given.
     """

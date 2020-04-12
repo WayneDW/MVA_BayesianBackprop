@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from models.RL.rl_utils import ReplayBuffer, Env
+from models.RL.rl_utils import ReplayBuffer, EnvMushroom
 
 
 class DeterministicRLNet(nn.Module):
@@ -36,7 +36,7 @@ class RLReg(object):
         self.agent = agent
         self.buffer = ReplayBuffer(buffer_size)
         self.X_train = X_train
-        self.env = Env(np.arange(len(X_train)), y_train)
+        self.env = EnvMushroom(np.arange(len(X_train)), y_train)
         self.regret = 0
         self.episode = 0
         self.burn_in = burn_in
@@ -53,8 +53,11 @@ class RLReg(object):
 
             oracle = self.env.oracle
 
-            action = self.agent.act(self.X_train[self.context_ind])
-            action = action.item()
+            if self.episode < self.burn_in: # random action
+                action = np.random.randint(0, 2)
+            else:
+                action = self.agent.act(self.X_train[self.context_ind]).item()
+
             next_context_ind, reward = self.env.step(action)
             self.buffer.add(self.context_ind, action, reward)
             self.context_ind = next_context_ind
